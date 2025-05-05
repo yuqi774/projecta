@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>竖直放置两极板侧视图</title>
+    <style>
+        /* 整体缩放页面 */
+        body {
+            transform: scale(0.5);
+            transform-origin: top left;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="position: absolute; top: 10px; left: 10px;">
+        <input type="range" id="ballRateSlider" min="1" max="3000" value="100" step="1">
+        <span id="rateValue">100 毫秒</span>
+    </div>
+    <div style="position: absolute; top: 40px; left: 10px;">
+        <input type="range" id="speedSlider" min="1" max="10" value="5" step="1">
+        <span id="speedValue">速度: 5</span>
+    </div>
+    <!-- 将钾板按钮添加到速度滑杆下方 -->
+    <button id="potassiumButton" style="position: absolute; top: 70px; left: 10px;">钾板</button>
+    <!-- 新增钠板按钮 -->
+    <button id="sodiumButton" style="position: absolute; top: 100px; left: 10px;">钠板</button>
+    <svg id="mySvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 150">
+        <!-- 定义旋转中心 -->
+        <g transform="rotate(-45 25 25)">
+            <!-- 手电筒 -->
+            <rect x="20" y="10" width="10" height="15" fill="orange" />
+            <polygon points="25 25 21 27.5 29 27.5" fill="orange" />
+        </g>
+        <!-- 极板 A -->
+        <rect x="21.25" y="40" width="2.5" height="50" fill="lightgray" />
+        <text x="22.5" y="92.5" text-anchor="middle" dominant-baseline="middle" font-size="8">A</text>
+        <!-- 极板 B -->
+        <rect id="plateB" x="73.75" y="40" width="2.5" height="50" fill="lightgray" />
+        <text x="75" y="92.5" text-anchor="middle" dominant-baseline="middle" font-size="8">B</text>
+        <!-- 三角形光束 -->
+        <polygon id="beamTriangle" points="25 25 73.75 52.5 73.75 77.5" fill="yellow" />
+        <!-- 标注顶点 a -->
+        <text x="25" y="22.5" text-anchor="middle" dominant-baseline="middle" font-size="6">a</text>
+        <!-- 标注顶点 b -->
+        <text x="73.75" y="47.5" text-anchor="middle" dominant-baseline="middle" font-size="6">b</text>
+        <!-- 标注顶点 c -->
+        <text x="73.75" y="72.5" text-anchor="middle" dominant-baseline="middle" font-size="6">c</text>
+        <!-- 光带 -->
+        <g id="colorBand" transform="translate(5, 110)">
+            <rect x="0" y="0" width="10" height="10" fill="red" onclick="changeAllBallsColor('red', 0.25)" />
+            <rect x="12.5" y="0" width="10" height="10" fill="orange" onclick="changeAllBallsColor('orange', 0.4)" />
+            <rect x="25" y="0" width="10" height="10" fill="yellow" onclick="changeAllBallsColor('yellow', 0.55)" />
+            <rect x="37.5" y="0" width="10" height="10" fill="green" onclick="changeAllBallsColor('green', 0.7)" />
+            <rect x="50" y="0" width="10" height="10" fill="blue" onclick="changeAllBallsColor('blue', 0.85)" />
+            <rect x="62.5" y="0" width="10" height="10" fill="indigo" onclick="changeAllBallsColor('indigo', 1)" />
+            <rect x="75" y="0" width="10" height="10" fill="violet" onclick="changeAllBallsColor('violet', 1.15)" />
+        </g>
+    </svg>
+    <script>
+        const svg = document.getElementById('mySvg');
+        const triangle = document.getElementById('beamTriangle');
+        const ballRateSlider = document.getElementById('ballRateSlider');
+        const rateValue = document.getElementById('rateValue');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValue = document.getElementById('speedValue');
+        const potassiumButton = document.getElementById('potassiumButton');
+        const sodiumButton = document.getElementById('sodiumButton');
+        const plateB = document.getElementById('plateB');
+
+        // 三角形顶点坐标
+        const a = [25, 25];
+        const b = [73.75, 52.5];
+        const c = [73.75, 77.5];
+
+        let currentColor = 'red';
+        let currentRadius = 0.25;
+        let ballInterval = 100; // 初始生成间隔为 100 毫秒
+        let ballIntervalId;
+        let photonsReachedBC = 0; // 到达线段 bc 的光子数量
+        let photonCountInterval;
+        let speedFactor = 5; // 初始速度因子
+        let potassiumMode = false; // 钾板模式标志
+        let sodiumMode = false; // 钠板模式标志
+
+        function createBall() {
+            const ball = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            ball.setAttribute('cx', a[0]);
+            ball.setAttribute('cy', a[1]);
+            ball.setAttribute('r', currentRadius);
+            ball.setAttribute('fill', currentColor);
+            svg.appendChild(ball);
+
+            // 小球起始位置
+            let currentX = a[0];
+            let currentY = a[1];
+
+            // 计算线段 bc 上随机目标点
+            const targetY = Math.random() * (c[1] - b[1]) + b[1];
+            const targetX = 73.75;
+
+            // 增加总步数，减少每一步的移动距离
+            const totalSteps = 250 / speedFactor;
+            const stepX = (targetX - currentX) / totalSteps;
+            const stepY = (targetY - currentY) / totalSteps;
+            let stepCount = 0;
+
+            function moveBall() {
+                if (stepCount < totalSteps) {
+                    currentX += stepX;
+                    currentY += stepY;
+                    ball.setAttribute('cx', currentX);
+                    ball.setAttribute('cy', currentY);
+                    stepCount++;
+                } else {
+                    svg.removeChild(ball);
+                    if (potassiumMode) {
+                        const allowedColors = ['green', 'blue', 'indigo', 'violet'];
+                        if (allowedColors.includes(currentColor)) {
+                            photonsReachedBC++; // 小球到达线段 bc，计数加 1
+                        }
+                    } else if (sodiumMode) {
+                        const allowedColors = ['blue', 'indigo', 'violet'];
+                        if (allowedColors.includes(currentColor)) {
+                            photonsReachedBC++; // 小球到达线段 bc，计数加 1
+                        }
+                    } else {
+                        photonsReachedBC++; // 小球到达线段 bc，计数加 1
+                    }
+                }
+            }
+
+            // 小球生成后立即开始移动
+            const moveInterval = setInterval(moveBall, 10);
+        }
+
+        function changeAllBallsColor(color, radius) {
+            currentColor = color;
+            currentRadius = radius;
+            const balls = svg.querySelectorAll('circle');
+            balls.forEach(ball => {
+                if (ball.getAttribute('fill')!== 'black') {
+                    ball.setAttribute('fill', color);
+                    ball.setAttribute('r', radius);
+                }
+            });
+        }
+
+        function startBallInterval() {
+            clearInterval(ballIntervalId);
+            ballIntervalId = setInterval(createBall, ballInterval);
+        }
+
+        function startPhotonCountInterval() {
+            clearInterval(photonCountInterval);
+            photonCountInterval = setInterval(() => {
+                // 根据到达线段 bc 的光子数量创建小黑球
+                for (let i = 0; i < photonsReachedBC; i++) {
+                    createBlackBall();
+                }
+                photonsReachedBC = 0; // 计数清零
+            }, 1000); // 每秒统计一次
+        }
+
+        function createBlackBall() {
+            const blackBall = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            const startY = Math.random() * (c[1] - b[1]) + b[1];
+            blackBall.setAttribute('cx', 73.75);
+            blackBall.setAttribute('cy', startY);
+            blackBall.setAttribute('r', 0.5);
+            blackBall.setAttribute('fill', 'black');
+            svg.appendChild(blackBall);
+
+            // 小黑球目标位置（极板 A）
+            const targetX = 21.25;
+            const targetY = startY;
+
+            const totalSteps = 250 / (speedFactor * 0.9); // 小黑球速度稍慢
+            const stepX = (targetX - 73.75) / totalSteps;
+            const stepY = 0; // 水平移动，垂直位置不变
+            let stepCount = 0;
+
+            function moveBlackBall() {
+                if (stepCount < totalSteps) {
+                    const newX = parseFloat(blackBall.getAttribute('cx')) + stepX;
+                    const newY = parseFloat(blackBall.getAttribute('cy')) + stepY;
+                    blackBall.setAttribute('cx', newX);
+                    blackBall.setAttribute('cy', newY);
+                    stepCount++;
+                } else {
+                    svg.removeChild(blackBall);
+                }
+            }
+
+            const moveInterval = setInterval(moveBlackBall, 10);
+        }
+
+        ballRateSlider.addEventListener('input', () => {
+            ballInterval = parseInt(ballRateSlider.value);
+            rateValue.textContent = `${ballInterval} 毫秒`;
+            startBallInterval();
+        });
+
+        speedSlider.addEventListener('input', () => {
+            speedFactor = parseInt(speedSlider.value);
+            speedValue.textContent = `速度: ${speedFactor}`;
+        });
+
+        potassiumButton.addEventListener('click', () => {
+            potassiumMode = !potassiumMode;
+            sodiumMode = false; // 关闭钠板模式
+            if (potassiumMode) {
+                plateB.setAttribute('fill', 'blue'); // 极板 B 变色
+            } else {
+                plateB.setAttribute('fill', 'lightgray'); // 极板 B 恢复原色
+            }
+        });
+
+        sodiumButton.addEventListener('click', () => {
+            sodiumMode = !sodiumMode;
+            potassiumMode = false; // 关闭钾板模式
+            if (sodiumMode) {
+                plateB.setAttribute('fill', 'brown'); // 极板 B 变色
+            } else {
+                plateB.setAttribute('fill', 'lightgray'); // 极板 B 恢复原色
+            }
+        });
+
+        startBallInterval();
+        startPhotonCountInterval();
+    </script>
+</body>
+
+</html>    
